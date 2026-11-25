@@ -10,13 +10,13 @@ from app.main import create_app
 from app.queue.base import WorkerQueueProducer
 from app.services.extraction.factory import create_extraction_provider
 from app.services.invoice_service import process_invoice_job
-from app.storage.r2_adapter import R2ObjectStorage
+from app.storage.supabase_adapter import SupabaseObjectStorage
 
 
 def _build_worker_app(env: Any):
     settings = load_worker_env(env)
     db = D1Database(env.DB)
-    storage = R2ObjectStorage(env.BUCKET)
+    storage = SupabaseObjectStorage(settings.supabase_url, settings.supabase_secret_key, settings.supabase_bucket)
     queue = WorkerQueueProducer(env.INVOICE_QUEUE)
     provider = create_extraction_provider(settings)
     return create_app(
