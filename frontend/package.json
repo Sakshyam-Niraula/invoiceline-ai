@@ -1,0 +1,44 @@
+{
+  "name": "invoiceline-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vinext dev --port 3000",
+    "build": "vinext build",
+    "start": "vinext start",
+    "check": "vinext check",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.0.1",
+    "@tanstack/react-query": "^5.75.0",
+    "@tanstack/react-table": "^8.21.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.511.0",
+    "next": "^16.4.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-hook-form": "^7.56.4",
+    "tailwind-merge": "^3.3.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.70.2",
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "@vitejs/plugin-rsc": "^0.5.39",
+    "react-server-dom-webpack": "^19.3.1",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.0",
+    "vinext": "^1.4.6",
+    "vite": "^8.3.8",
+    "wrangler": "^4.168.0"
+  },
+  "type": "module"
+}

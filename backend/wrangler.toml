@@ -1,0 +1,65 @@
+name = "invoiceline-api"
+main = "app/worker.py"
+compatibility_date = "2026-09-21"
+compatibility_flags = ["python_workers"]
+
+[vars]
+ENVIRONMENT = "development"
+EXTRACTION_PROVIDER = "gemini"
+GEMINI_MODEL = "gemini-2.5-flash"
+MAX_UPLOAD_BYTES = "15728640"
+ALLOWED_ORIGINS = "http://localhost:3000"
+RATE_LIMIT_PER_MINUTE = "120"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "invoiceline-db-dev"
+database_id = "REPLACE_WITH_DEV_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "invoiceline-documents-dev"
+
+[[queues.producers]]
+binding = "INVOICE_QUEUE"
+queue = "invoiceline-extraction-dev"
+
+[[queues.consumers]]
+queue = "invoiceline-extraction-dev"
+max_batch_size = 5
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "invoiceline-extraction-dlq-dev"
+
+[env.production]
+name = "invoiceline-api-prod"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+EXTRACTION_PROVIDER = "gemini"
+GEMINI_MODEL = "gemini-2.5-flash"
+MAX_UPLOAD_BYTES = "15728640"
+ALLOWED_ORIGINS = "https://app.invoiceline.ai"
+RATE_LIMIT_PER_MINUTE = "120"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "invoiceline-db-prod"
+database_id = "REPLACE_WITH_PROD_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[env.production.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "invoiceline-documents-prod"
+
+[[env.production.queues.producers]]
+binding = "INVOICE_QUEUE"
+queue = "invoiceline-extraction-prod"
+
+[[env.production.queues.consumers]]
+queue = "invoiceline-extraction-prod"
+max_batch_size = 5
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "invoiceline-extraction-dlq-prod"
