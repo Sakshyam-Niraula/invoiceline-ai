@@ -15,9 +15,7 @@ import type {
   WebhookItem,
 } from "@/types/api";
 
-const API_BASE =
-  (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) ||
-  "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const TOKEN_STORAGE_KEY = "invoiceline_access_token";
 
