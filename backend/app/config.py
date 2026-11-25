@@ -24,6 +24,9 @@ class Settings:
     public_base_url: str
     session_ttl_hours: int
     signed_url_ttl_seconds: int
+    supabase_url: str
+    supabase_secret_key: str
+    supabase_bucket: str
 
     @property
     def is_production(self) -> bool:
@@ -57,6 +60,9 @@ class Settings:
             public_base_url=str(raw.get("PUBLIC_BASE_URL", "http://localhost:8000")).rstrip("/"),
             session_ttl_hours=int(raw.get("SESSION_TTL_HOURS", 24 * 7)),
             signed_url_ttl_seconds=int(raw.get("SIGNED_URL_TTL_SECONDS", 300)),
+            supabase_url=str(raw.get("SUPABASE_URL", "")).rstrip("/"),
+            supabase_secret_key=str(raw.get("SUPABASE_SECRET_KEY", "")).strip(),
+            supabase_bucket=str(raw.get("SUPABASE_BUCKET", "invoiceline-documents")).strip(),
         )
 
 
@@ -77,6 +83,9 @@ def load_worker_env(worker_env: Any) -> Settings:
         "PUBLIC_BASE_URL",
         "SESSION_TTL_HOURS",
         "SIGNED_URL_TTL_SECONDS",
+        "SUPABASE_URL",
+        "SUPABASE_SECRET_KEY",
+        "SUPABASE_BUCKET",
     ):
         val = getattr(worker_env, key, None)
         if val is not None:
