@@ -39,7 +39,7 @@ jobs:
           cache-dependency-glob: backend/pyproject.toml
 
       - name: Install Python dependencies
-        run: uv sync
+        run: uv sync --no-install-project
 
       - name: Deploy API Worker
         run: uv run pywrangler deploy --env production
