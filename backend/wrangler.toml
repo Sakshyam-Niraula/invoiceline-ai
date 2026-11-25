@@ -1,5 +1,5 @@
 name = "invoiceline-api"
-main = "app/worker.py"
+main = "worker.py"
 compatibility_date = "2026-11-25"
 compatibility_flags = ["python_workers"]
 
