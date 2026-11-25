@@ -19,13 +19,7 @@ def _build_worker_app(env: Any):
     storage = SupabaseObjectStorage(settings.supabase_url, settings.supabase_secret_key, settings.supabase_bucket)
     queue = WorkerQueueProducer(env.INVOICE_QUEUE)
     provider = create_extraction_provider(settings)
-    return create_app(
-        settings,
-        db=db,
-        storage=storage,
-        queue=queue,
-        extraction_provider=provider,
-    )
+    return create_app(settings, db=db, storage=storage, queue=queue, extraction_provider=provider)
 
 
 class Default(WorkerEntrypoint):
@@ -38,7 +32,7 @@ class Default(WorkerEntrypoint):
     async def queue(self, batch: Any) -> None:
         settings = load_worker_env(self.env)
         db = D1Database(self.env.DB)
-        storage = R2ObjectStorage(self.env.BUCKET)
+        storage = SupabaseObjectStorage(settings.supabase_url, settings.supabase_secret_key, settings.supabase_bucket)
         provider = create_extraction_provider(settings)
 
         for message in batch.messages:
