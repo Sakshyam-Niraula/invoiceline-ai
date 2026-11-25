@@ -86,7 +86,7 @@ jobs:
         run: npm run build
         env:
           CLOUDFLARE_ENV: production
-          NEXT_PUBLIC_API_URL: https://invoiceline-api-prod.sakshyamniraula2.workers.dev
+          VITE_API_URL: https://invoiceline-api-prod.sakshyamniraula2.workers.dev
 
       - name: Deploy website Worker
         run: npx wrangler deploy
