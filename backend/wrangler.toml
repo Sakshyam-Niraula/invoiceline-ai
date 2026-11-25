@@ -1,6 +1,6 @@
 name = "invoiceline-api"
 main = "app/worker.py"
-compatibility_date = "2026-09-21"
+compatibility_date = "2026-11-25"
 compatibility_flags = ["python_workers"]
 
 [vars]
@@ -40,13 +40,13 @@ ENVIRONMENT = "production"
 EXTRACTION_PROVIDER = "gemini"
 GEMINI_MODEL = "gemini-2.5-flash"
 MAX_UPLOAD_BYTES = "15728640"
-ALLOWED_ORIGINS = "https://app.invoiceline.ai"
+ALLOWED_ORIGINS = "https://invoiceline-web-prod.sakshyamniraula2.workers.dev"
 RATE_LIMIT_PER_MINUTE = "120"
 
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "invoiceline-db-prod"
-database_id = "REPLACE_WITH_PROD_D1_DATABASE_ID"
+database_id = "9a522d71-cd14-44fe-a09c-b3a583862774"
 migrations_dir = "migrations"
 
 [[env.production.r2_buckets]]
