@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Activity, ArrowUpRight, CheckCircle2, CircleAlert, FileText, LayoutDashboard, LogOut, Plus, Search, ShieldCheck, UploadCloud } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Activity, CheckCircle2, CircleAlert, FileText, LayoutDashboard, Plus, Search, ShieldCheck, UploadCloud } from "lucide-react";
 import { api, ApiClientError, getStoredToken, setStoredToken } from "@/lib/api";
 import type { AuthSession, InvoiceSummary, UsageSummary } from "@/types/api";
 
@@ -18,7 +18,23 @@ function Pill({ value }: { value: string }) {
   const color = ["approved", "passed"].includes(value) ? "bg-emerald-50 text-emerald-700" : ["failed", "rejected"].includes(value) ? "bg-rose-50 text-rose-700" : ["needs_review", "warning", "requires_review"].includes(value) ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600";
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${color}`}>{pretty(value)}</span>;
 }
-function TurnstileChallenge({ onToken }: { onToken: (token: string) => void }) {\n  const host = useRef<HTMLDivElement>(null);\n  const callback = useRef(onToken);\n  callback.current = onToken;\n  useEffect(() => {\n    if (!TURNSTILE_SITE_KEY || !host.current) return;\n    const script = document.createElement("script");\n    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";\n    script.async = true; script.defer = true;\n    let widget: string | undefined;\n    script.onload = () => { if (host.current && window.turnstile) widget = window.turnstile.render(host.current, { sitekey: TURNSTILE_SITE_KEY, callback: token => callback.current(token), "expired-callback": () => callback.current("") }); };\n    document.head.appendChild(script);\n    return () => { if (widget && window.turnstile) window.turnstile.remove(widget); script.remove(); };\n  }, []);\n  return TURNSTILE_SITE_KEY ? <div className="mt-5"><div ref={host}/></div> : null;\n}\nfunction Login({ done }: { done: (s: AuthSession) => void }) {
+function TurnstileChallenge({ onToken }: { onToken: (token: string) => void }) {
+  const host = useRef<HTMLDivElement>(null);
+  const callback = useRef(onToken);
+  callback.current = onToken;
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !host.current) return;
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true; script.defer = true;
+    let widget: string | undefined;
+    script.onload = () => { if (host.current && window.turnstile) widget = window.turnstile.render(host.current, { sitekey: TURNSTILE_SITE_KEY, callback: token => callback.current(token), "expired-callback": () => callback.current("") }); };
+    document.head.appendChild(script);
+    return () => { if (widget && window.turnstile) window.turnstile.remove(widget); script.remove(); };
+  }, []);
+  return TURNSTILE_SITE_KEY ? <div className="mt-5"><div ref={host}/></div> : null;
+}
+function Login({ done }: { done: (s: AuthSession) => void }) {
   const [register, setRegister] = useState(false), [email, setEmail] = useState(""), [password, setPassword] = useState(""), [name, setName] = useState(""), [org, setOrg] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [turnstileToken, setTurnstileToken] = useState("");
   async function submit(e: React.FormEvent) { e.preventDefault(); setBusy(true); setError(""); try { const s = register ? await api.register({ email, password, full_name: name, organisation_name: org, turnstile_token: turnstileToken }) : await api.login({ email, password, turnstile_token: turnstileToken }); setStoredToken(s.access_token); done(s); } catch (x) { setError(x instanceof Error ? x.message : "Could not sign in."); } finally { setBusy(false); } }
   return <main className="min-h-screen bg-slate-50 lg:grid lg:grid-cols-2"><section className="hidden bg-[#101d35] p-14 text-white lg:flex lg:flex-col lg:justify-between"><div className="text-xl font-bold">▦ InvoiceLine <span className="text-blue-300">AI</span></div><div className="max-w-lg"><span className="rounded-full bg-blue-400/15 px-3 py-2 text-xs text-blue-200">INTELLIGENT INVOICE OPERATIONS</span><h1 className="mt-7 text-5xl font-bold leading-tight">Every invoice. <span className="text-blue-300">Under control.</span></h1><p className="mt-6 text-lg leading-8 text-slate-300">Extract, review and validate invoice data in one organised workspace.</p><div className="mt-9 space-y-3 text-sm text-slate-200">{["AI-powered document extraction","Line-item validation","Clear review workflows"].map(x => <p key={x}>✓ &nbsp; {x}</p>)}</div></div><p className="text-xs text-slate-400">Invoice intelligence for modern teams</p></section><section className="flex min-h-screen items-center justify-center p-6"><form onSubmit={submit} className="w-full max-w-md"><div className="mb-9 text-xl font-bold text-slate-900 lg:hidden">InvoiceLine <span className="text-blue-600">AI</span></div><p className="text-sm font-semibold uppercase tracking-widest text-blue-600">{register ? "Get started" : "Welcome back"}</p><h2 className="mt-3 text-3xl font-bold text-slate-900">{register ? "Create your workspace" : "Sign in to InvoiceLine"}</h2><p className="mt-2 text-sm text-slate-500">Access your secure invoice workspace.</p>{register && <><label className="mt-6 block text-sm font-medium">Full name<input required value={name} onChange={e=>setName(e.target.value)} className="field" /></label><label className="mt-4 block text-sm font-medium">Organisation<input required value={org} onChange={e=>setOrg(e.target.value)} className="field" /></label></>}<label className="mt-6 block text-sm font-medium">Email address<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} className="field" /></label><label className="mt-4 block text-sm font-medium">Password<input required minLength={8} type="password" value={password} onChange={e=>setPassword(e.target.value)} className="field" /></label>{TURNSTILE_SITE_KEY && <TurnstileChallenge onToken={setTurnstileToken} />}{error && <p className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}<button disabled={busy || (!!TURNSTILE_SITE_KEY && !turnstileToken)} className="mt-6 w-full rounded-xl bg-blue-600 p-3.5 font-semibold text-white hover:bg-blue-700 disabled:opacity-60">{busy ? "Please wait…" : register ? "Create account" : "Sign in"}</button><p className="mt-6 text-center text-sm text-slate-500">{register ? "Already registered?" : "New to InvoiceLine AI?"} <button type="button" onClick={()=>{setRegister(!register);setError("");}} className="font-semibold text-blue-600">{register ? "Sign in" : "Create an account"}</button></p></form></section></main>;
