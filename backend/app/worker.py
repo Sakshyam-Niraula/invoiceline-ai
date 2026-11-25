@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from workers import WorkerEntrypoint, asgi
+from workers import Response, WorkerEntrypoint, asgi
 
 from app.config import load_worker_env
 from app.db.d1_adapter import D1Database
@@ -26,8 +26,45 @@ class Default(WorkerEntrypoint):
     """Cloudflare Python Worker entrypoint for HTTP ASGI and Queue consumers."""
 
     async def fetch(self, request: Any) -> Any:
+        settings = load_worker_env(self.env)
+        origin = request.headers.get("Origin")
+        allowed = origin in settings.allowed_origins if origin else False
+
+        # Answer browser preflight requests at the Worker edge. This avoids
+        # relying on the ASGI adapter to preserve CORS middleware responses.
+        if request.method == "OPTIONS" and request.headers.get("Access-Control-Request-Method"):
+            if not allowed:
+                return Response("Origin not allowed", status=403)
+            requested_headers = request.headers.get("Access-Control-Request-Headers", "authorization,content-type")
+            return Response(
+                None,
+                status=204,
+                headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+                    "Access-Control-Allow-Headers": requested_headers,
+                    "Access-Control-Max-Age": "86400",
+                    "Vary": "Origin",
+                },
+            )
+
         application = _build_worker_app(self.env)
-        return await asgi.fetch(application, request, self.env)
+        response = await asgi.fetch(application, request, self.env)
+
+        # Add CORS headers at the Worker boundary to cover success and error
+        # responses alike, including responses returned by the ASGI adapter.
+        if allowed:
+            response = Response(response.body, response)
+            response.headers.set("Access-Control-Allow-Origin", origin)
+            response.headers.set("Access-Control-Allow-Credentials", "true")
+            response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+            response.headers.set(
+                "Access-Control-Allow-Headers",
+                "Authorization, Content-Type, Idempotency-Key, X-Request-Id",
+            )
+            response.headers.append("Vary", "Origin")
+        return response
 
     async def queue(self, batch: Any) -> None:
         settings = load_worker_env(self.env)
