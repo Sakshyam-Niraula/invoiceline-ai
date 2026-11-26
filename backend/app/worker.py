@@ -55,7 +55,9 @@ class Default(WorkerEntrypoint):
         # Add CORS headers at the Worker boundary to cover success and error
         # responses alike, including responses returned by the ASGI adapter.
         if allowed:
-            response = Response(response.body, response)
+            # The ASGI adapter already returned a valid Worker Response.
+            # Mutate its headers in place instead of reconstructing it: this
+            # preserves the original status, cookies, and streaming body.
             response.headers.set("Access-Control-Allow-Origin", origin)
             response.headers.set("Access-Control-Allow-Credentials", "true")
             response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
