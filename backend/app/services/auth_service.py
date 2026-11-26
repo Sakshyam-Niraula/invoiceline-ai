@@ -350,3 +350,58 @@ async def get_me(db: Database, user_id: str, organisation_id: str) -> MeResponse
         role=role,
         permissions=ROLE_PERMISSIONS[role],
     )
+
+
+async def provision_supabase_user(
+    db: Database,
+    settings: Settings,
+    supabase_user: dict,
+    access_token: str,
+    request_id: str | None = None,
+) -> AuthSessionResponse:
+    """Link a verified Supabase identity to the existing InvoiceLine tenant model."""
+    email = str(supabase_user["email"]).strip().lower()
+    metadata = supabase_user.get("user_metadata") or {}
+    full_name = str(metadata.get("full_name") or metadata.get("name") or email.split("@")[0]).strip()[:120]
+    organisation_name = str(metadata.get("organisation_name") or f"{full_name}'s workspace").strip()[:120]
+    now = utc_now_iso()
+    user = await db.fetchone("SELECT id, email, full_name FROM users WHERE email = ?", (email,))
+
+    if user is None:
+        user_id = generate_id("usr")
+        # Supabase owns the password. This random hash only satisfies the legacy
+        # schema constraint; it is never used to authenticate this account.
+        await db.execute(
+            "INSERT INTO users (id, email, full_name, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, email, full_name, hash_password(secrets.token_urlsafe(48)), now, now),
+        )
+        user = {"id": user_id, "email": email, "full_name": full_name}
+
+    membership = await db.fetchone(
+        """SELECT m.role, o.id AS org_id, o.name AS org_name, o.slug AS org_slug, o.retention_days
+           FROM memberships m JOIN organisations o ON o.id = m.organisation_id
+           WHERE m.user_id = ? ORDER BY m.created_at ASC LIMIT 1""",
+        (user["id"],),
+    )
+    if membership is None:
+        org_id = generate_id("org")
+        slug = _slugify(organisation_name)
+        await db.execute(
+            "INSERT INTO organisations (id, name, slug, retention_days, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (org_id, organisation_name or "My workspace", slug, 365, now, now),
+        )
+        await db.execute(
+            "INSERT INTO memberships (id, organisation_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)",
+            (generate_id("mem"), org_id, user["id"], "owner", now),
+        )
+        membership = {"role": "owner", "org_id": org_id, "org_name": organisation_name or "My workspace", "org_slug": slug, "retention_days": 365}
+
+    role: RoleType = membership["role"]
+    expires_at = (datetime.now(UTC) + timedelta(hours=settings.session_ttl_hours)).isoformat()
+    return AuthSessionResponse(
+        access_token=access_token,
+        expires_at=expires_at,
+        user=UserSummary(id=str(user["id"]), email=email, full_name=str(user["full_name"])),
+        organisation=OrganisationSummary(id=str(membership["org_id"]), name=str(membership["org_name"]), slug=str(membership["org_slug"]), retention_days=int(membership["retention_days"])),
+        role=role,
+    )
