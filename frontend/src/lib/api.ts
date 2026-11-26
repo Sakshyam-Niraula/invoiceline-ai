@@ -152,7 +152,18 @@ export const api = {
   login: (body: { email: string; password: string; turnstile_token?: string }) =>
     apiFetch<AuthSession>("/v1/auth/login", { method: "POST", body: JSON.stringify(body) }),
 
-  logout: async () => {\n    const token = getStoredToken();\n    if (token && SUPABASE_URL && SUPABASE_KEY) { try { await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method: "POST", headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` } }); } catch {} }\n    setStoredToken(null);\n  },
+  logout: async () => {
+    const token = getStoredToken();
+    if (token && SUPABASE_URL && SUPABASE_KEY) {
+      try {
+        await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+          method: "POST",
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` },
+        });
+      } catch {}
+    }
+    setStoredToken(null);
+  },
 
   me: () => apiFetch<MeResponse>("/v1/auth/me"),
 
