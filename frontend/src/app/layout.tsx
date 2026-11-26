@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "InvoiceLine AI",
   description: "AI-powered invoice extraction, line-item processing and validation platform",
+  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg", apple: "/logo.svg" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
