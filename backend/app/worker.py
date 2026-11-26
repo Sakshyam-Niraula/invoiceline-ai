@@ -6,6 +6,7 @@ from typing import Any
 from workers import Response, WorkerEntrypoint, asgi
 
 from app.config import load_worker_env
+from app.core.crypto import utc_now_iso
 from app.db.d1_adapter import D1Database
 from app.main import create_app
 from app.queue.base import WorkerQueueProducer
