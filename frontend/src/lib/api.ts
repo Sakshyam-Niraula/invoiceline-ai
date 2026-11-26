@@ -107,11 +107,14 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
 
-  const resp = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
+  let resp = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: "include" });
+  if (resp.status === 401 && token) {
+    const refreshed = await refreshSupabaseAccessToken();
+    if (refreshed) {
+      headers.set("Authorization", `Bearer ${refreshed}`);
+      resp = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: "include" });
+    }
+  }
 
   if (resp.status === 204) {
     return undefined as T;
