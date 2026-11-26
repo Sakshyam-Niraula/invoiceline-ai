@@ -93,6 +93,8 @@ jobs:
         env:
           CLOUDFLARE_ENV: production
           VITE_API_URL: https://invoiceline-api-prod.sakshyamniraula2.workers.dev
+          VITE_SUPABASE_URL: https://fqbsiybsuvfzwoxtjxsu.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_cP8bm0jWniB1sCSwwMfiSA_TI3rL4GG
 
       - name: Deploy website Worker
         run: npx wrangler deploy
