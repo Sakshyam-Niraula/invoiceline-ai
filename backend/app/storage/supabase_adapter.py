@@ -18,12 +18,18 @@ class SupabaseObjectStorage:
         return f"{self._base}/storage/v1/object/{self._bucket}/{encoded}"
 
     def _headers(self, content_type: str = "application/octet-stream") -> dict[str, str]:
-        return {
+        # New Supabase secret API keys (sb_secret_...) are opaque API keys,
+        # not JWTs. They belong in the apikey header only. Sending one as a
+        # Bearer token makes Storage reject it with "Invalid Compact JWS".
+        headers = {
             "apikey": self._secret,
-            "Authorization": f"Bearer {self._secret}",
             "Content-Type": content_type,
             "x-upsert": "true",
         }
+        # Keep compatibility with legacy service_role JWT keys.
+        if not self._secret.startswith("sb_secret_"):
+            headers["Authorization"] = f"Bearer {self._secret}"
+        return headers
 
     async def put(self, key: str, data: bytes, content_type: str) -> None:
         async with httpx.AsyncClient(timeout=60.0) as client:
