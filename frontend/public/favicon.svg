@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="InvoiceLine AI favicon">
+  <rect width="128" height="128" rx="30" fill="#101d35"/>
+  <path d="M35 25h43l17 17v61H35z" fill="#fff" opacity=".98"/>
+  <path d="M78 25v18h17" fill="#dce9f2"/>
+  <rect x="47" y="56" width="38" height="7" rx="3.5" fill="#b8c6d8"/>
+  <rect x="47" y="72" width="25" height="7" rx="3.5" fill="#b8c6d8"/>
+  <rect x="47" y="89" width="31" height="7" rx="3.5" fill="#b8c6d8"/>
+  <path d="M76 74l7 7 17-20" fill="none" stroke="#17b89a" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
