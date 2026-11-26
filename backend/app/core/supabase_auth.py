@@ -12,7 +12,7 @@ async def verify_supabase_access_token(token: str, settings: Settings) -> dict:
     The JWT is never trusted based on its decoded payload. Supabase Auth
     validates the signature, expiry, issuer and user status.
     """
-    if not settings.supabase_auth_url or not settings.supabase_auth_publishable_key:
+    if not settings.supabase_url or not settings.supabase_publishable_key:
         raise RuntimeError("Supabase Auth is not configured")
 
     try:
