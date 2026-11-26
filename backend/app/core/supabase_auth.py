@@ -18,9 +18,9 @@ async def verify_supabase_access_token(token: str, settings: Settings) -> dict:
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             response = await client.get(
-                f"{settings.supabase_auth_url}/auth/v1/user",
+                f"{settings.supabase_url}/auth/v1/user",
                 headers={
-                    "apikey": settings.supabase_auth_publishable_key,
+                    "apikey": settings.supabase_publishable_key,
                     "Authorization": f"Bearer {token}",
                 },
             )
