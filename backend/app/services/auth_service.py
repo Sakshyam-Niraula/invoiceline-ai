@@ -359,42 +359,82 @@ async def provision_supabase_user(
     access_token: str,
     request_id: str | None = None,
 ) -> AuthSessionResponse:
-    """Link a verified Supabase identity to the existing InvoiceLine tenant model."""
+    """Link a verified Supabase identity to the existing InvoiceLine tenant model.
+
+    Supabase owns the user's password. The legacy password_hash column is
+    populated with a non-hash sentinel so this path never performs expensive
+    password hashing in the Cloudflare Worker. verify_password rejects this
+    value, so it cannot be used for local-password authentication.
+    """
     email = str(supabase_user["email"]).strip().lower()
     metadata = supabase_user.get("user_metadata") or {}
     full_name = str(metadata.get("full_name") or metadata.get("name") or email.split("@")[0]).strip()[:120]
     organisation_name = str(metadata.get("organisation_name") or f"{full_name}'s workspace").strip()[:120]
     now = utc_now_iso()
+
     user = await db.fetchone("SELECT id, email, full_name FROM users WHERE email = ?", (email,))
+    created_user_id: str | None = None
+    created_org_id: str | None = None
+    created_membership_id: str | None = None
 
-    if user is None:
-        user_id = generate_id("usr")
-        # Supabase owns the password. This random hash only satisfies the legacy
-        # schema constraint; it is never used to authenticate this account.
-        await db.execute(
-            "INSERT INTO users (id, email, full_name, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (user_id, email, full_name, hash_password(secrets.token_urlsafe(48)), now, now),
-        )
-        user = {"id": user_id, "email": email, "full_name": full_name}
+    try:
+        if user is None:
+            user_id = generate_id("usr")
+            await db.execute(
+                "INSERT INTO users (id, email, full_name, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, email, full_name, "supabase_managed", now, now),
+            )
+            created_user_id = user_id
+            user = {"id": user_id, "email": email, "full_name": full_name}
 
-    membership = await db.fetchone(
-        """SELECT m.role, o.id AS org_id, o.name AS org_name, o.slug AS org_slug, o.retention_days
-           FROM memberships m JOIN organisations o ON o.id = m.organisation_id
-           WHERE m.user_id = ? ORDER BY m.created_at ASC LIMIT 1""",
-        (user["id"],),
-    )
-    if membership is None:
-        org_id = generate_id("org")
-        slug = _slugify(organisation_name)
-        await db.execute(
-            "INSERT INTO organisations (id, name, slug, retention_days, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (org_id, organisation_name or "My workspace", slug, 365, now, now),
+        membership = await db.fetchone(
+            """SELECT m.role, o.id AS org_id, o.name AS org_name, o.slug AS org_slug, o.retention_days
+               FROM memberships m JOIN organisations o ON o.id = m.organisation_id
+               WHERE m.user_id = ? ORDER BY m.created_at ASC LIMIT 1""",
+            (user["id"],),
         )
-        await db.execute(
-            "INSERT INTO memberships (id, organisation_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)",
-            (generate_id("mem"), org_id, user["id"], "owner", now),
-        )
-        membership = {"role": "owner", "org_id": org_id, "org_name": organisation_name or "My workspace", "org_slug": slug, "retention_days": 365}
+
+        if membership is None:
+            org_id = generate_id("org")
+            slug = _slugify(organisation_name)
+            await db.execute(
+                "INSERT INTO organisations (id, name, slug, retention_days, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (org_id, organisation_name or "My workspace", slug, 365, now, now),
+            )
+            created_org_id = org_id
+
+            membership_id = generate_id("mem")
+            await db.execute(
+                "INSERT INTO memberships (id, organisation_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)",
+                (membership_id, org_id, user["id"], "owner", now),
+            )
+            created_membership_id = membership_id
+            membership = {
+                "role": "owner",
+                "org_id": org_id,
+                "org_name": organisation_name or "My workspace",
+                "org_slug": slug,
+                "retention_days": 365,
+            }
+    except Exception:
+        # D1 statements commit individually. Compensate for partial provisioning
+        # so a retry can safely create a complete account.
+        if created_membership_id is not None:
+            try:
+                await db.execute("DELETE FROM memberships WHERE id = ?", (created_membership_id,))
+            except Exception:
+                pass
+        if created_org_id is not None:
+            try:
+                await db.execute("DELETE FROM organisations WHERE id = ?", (created_org_id,))
+            except Exception:
+                pass
+        if created_user_id is not None:
+            try:
+                await db.execute("DELETE FROM users WHERE id = ?", (created_user_id,))
+            except Exception:
+                pass
+        raise
 
     role: RoleType = membership["role"]
     expires_at = (datetime.now(UTC) + timedelta(hours=settings.session_ttl_hours)).isoformat()
@@ -402,6 +442,11 @@ async def provision_supabase_user(
         access_token=access_token,
         expires_at=expires_at,
         user=UserSummary(id=str(user["id"]), email=email, full_name=str(user["full_name"])),
-        organisation=OrganisationSummary(id=str(membership["org_id"]), name=str(membership["org_name"]), slug=str(membership["org_slug"]), retention_days=int(membership["retention_days"])),
+        organisation=OrganisationSummary(
+            id=str(membership["org_id"]),
+            name=str(membership["org_name"]),
+            slug=str(membership["org_slug"]),
+            retention_days=int(membership["retention_days"]),
+        ),
         role=role,
     )

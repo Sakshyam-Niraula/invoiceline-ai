@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import httpx
 
+from app.services.auth_service import provision_supabase_user
+
 
 async def _register(
     client: httpx.AsyncClient,
@@ -141,3 +143,40 @@ async def test_organisation_isolation_and_rbac(client: httpx.AsyncClient) -> Non
     # Owner A revokes key cleanly
     revoke_ok = await client.delete(f"/v1/api-keys/{key_data['id']}", headers=headers_a)
     assert revoke_ok.status_code == 204
+
+
+
+async def test_supabase_provisioning_creates_workspace_without_password_hashing(
+    db, test_settings
+) -> None:
+    identity = {
+        "id": "supabase-user-1",
+        "email": "New.User@example.com",
+        "user_metadata": {"full_name": "New User"},
+    }
+
+    first = await provision_supabase_user(
+        db, test_settings, identity, "supabase-access-token"
+    )
+
+    assert first.user.email == "new.user@example.com"
+    assert first.role == "owner"
+    assert first.organisation.name == "New User's workspace"
+
+    stored_user = await db.fetchone(
+        "SELECT id, email, password_hash FROM users WHERE email = ?",
+        ("new.user@example.com",),
+    )
+    assert stored_user is not None
+    assert stored_user["password_hash"] == "supabase_managed"
+
+    # Provisioning is idempotent: repeat calls reuse the existing tenant.
+    second = await provision_supabase_user(
+        db, test_settings, identity, "supabase-access-token"
+    )
+    assert second.user.id == first.user.id
+    assert second.organisation.id == first.organisation.id
+
+    assert await db.fetchone("SELECT COUNT(*) AS n FROM users") == {"n": 1}
+    assert await db.fetchone("SELECT COUNT(*) AS n FROM organisations") == {"n": 1}
+    assert await db.fetchone("SELECT COUNT(*) AS n FROM memberships") == {"n": 1}
