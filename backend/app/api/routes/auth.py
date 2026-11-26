@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from app.api.deps import AuthContext, get_auth_context, get_db, get_request_id, get_settings
 from app.config import Settings
 from app.core.rate_limit import enforce_rate_limit
+from app.core.supabase_auth import verify_supabase_access_token
 from app.core.turnstile import verify_turnstile_token
 from app.db.base import Database
 from app.schemas.auth import (
@@ -35,6 +36,25 @@ def _set_session_cookie(response: Response, token: str, settings: Settings) -> N
         samesite="lax",
         max_age=settings.session_ttl_hours * 3600,
         path="/",
+    )
+
+
+
+
+@router.post("/provision", response_model=AuthSessionResponse)
+async def provision_supabase_session(
+    request: Request,
+    db: Database = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> AuthSessionResponse:
+    authorization = request.headers.get("authorization", "")
+    if not authorization.lower().startswith("bearer "):
+        from app.core.errors import UnauthorizedError
+        raise UnauthorizedError("Supabase access token required")
+    token = authorization[7:].strip()
+    supabase_user = await verify_supabase_access_token(token, settings)
+    return await auth_service.provision_supabase_user(
+        db, settings, supabase_user, token, request_id=get_request_id(request)
     )
 
 
