@@ -125,7 +125,23 @@ async def register_user(
             request_id=request_id,
         ),
     ]
-    await db.batch(statements)
+    # D1's Python binding can fail to bridge a Python list of prepared
+    # statements into the JavaScript batch API. Execute this small account
+    # creation sequence individually and compensate on failure instead.
+    try:
+        for statement in statements:
+            await db.execute(statement.sql, statement.params)
+    except Exception:
+        # Keep a failed signup from leaving a partial account behind.
+        try:
+            await db.execute("DELETE FROM organisations WHERE id = ?", (org_id,))
+        except Exception:
+            pass
+        try:
+            await db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        except Exception:
+            pass
+        raise
 
     return AuthSessionResponse(
         access_token=raw_token,
