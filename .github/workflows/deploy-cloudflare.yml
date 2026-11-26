@@ -41,6 +41,9 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --no-install-project
 
+      - name: Run backend test suite
+        run: uv run pytest -q
+
       - name: Deploy API Worker
         run: uv run pywrangler deploy --env production
         env:
@@ -81,6 +84,12 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Run frontend production build validation
+        run: npm run build
+        env:
+          CLOUDFLARE_ENV: production
+          VITE_API_URL: https://invoiceline-api-prod.sakshyamniraula2.workers.dev
 
       - name: Build production Worker
         run: npm run build
