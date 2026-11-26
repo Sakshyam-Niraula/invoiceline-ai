@@ -1,6 +1,12 @@
 name: Deploy InvoiceLine AI to Cloudflare
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/deploy-cloudflare.yml"
   push:
     branches: [main]
     paths:
@@ -45,12 +51,14 @@ jobs:
         run: uv run pytest -q
 
       - name: Deploy API Worker
+        if: github.event_name != 'pull_request'
         run: uv run pywrangler deploy --env production
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: a90021b93a5357cad1c01079f4a8cf1b
 
       - name: Configure API secrets
+        if: github.event_name != 'pull_request'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: a90021b93a5357cad1c01079f4a8cf1b
@@ -97,6 +105,7 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_cP8bm0jWniB1sCSwwMfiSA_TI3rL4GG
 
       - name: Deploy website Worker
+        if: github.event_name != 'pull_request'
         run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

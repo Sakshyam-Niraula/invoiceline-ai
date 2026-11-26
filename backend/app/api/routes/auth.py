@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, Request, Response
 
 from app.api.deps import AuthContext, get_auth_context, get_db, get_request_id, get_settings
@@ -17,6 +19,8 @@ from app.schemas.auth import (
     RegisterRequest,
 )
 from app.services import auth_service
+
+logger = logging.getLogger("invoiceline.auth")
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
@@ -53,9 +57,16 @@ async def provision_supabase_session(
         raise UnauthorizedError("Supabase access token required")
     token = authorization[7:].strip()
     supabase_user = await verify_supabase_access_token(token, settings)
-    return await auth_service.provision_supabase_user(
-        db, settings, supabase_user, token, request_id=get_request_id(request)
-    )
+    try:
+        return await auth_service.provision_supabase_user(
+            db, settings, supabase_user, token, request_id=get_request_id(request)
+        )
+    except Exception:
+        logger.exception(
+            "Supabase account provisioning failed (request_id=%s)",
+            get_request_id(request),
+        )
+        raise
 
 
 @router.post("/register", response_model=AuthSessionResponse, status_code=201)
