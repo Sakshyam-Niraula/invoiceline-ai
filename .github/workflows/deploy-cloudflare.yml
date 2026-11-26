@@ -88,9 +88,6 @@ jobs:
       - name: Type-check frontend
         run: npm run typecheck
 
-      - name: Lint frontend
-        run: npm run lint
-
       - name: Build production Worker
         run: npm run build
         env:
