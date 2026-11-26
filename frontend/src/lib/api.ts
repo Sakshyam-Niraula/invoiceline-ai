@@ -18,6 +18,9 @@ import type {
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const TOKEN_STORAGE_KEY = "invoiceline_access_token";
+const REFRESH_STORAGE_KEY = "invoiceline_refresh_token";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 
 export class ApiClientError extends Error {
   status: number;
@@ -45,7 +48,53 @@ export function setStoredToken(token: string | null): void {
     window.sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
   } else {
     window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    window.sessionStorage.removeItem(REFRESH_STORAGE_KEY);
   }
+}
+
+export function setStoredRefreshToken(token: string | null): void {
+  if (typeof window === "undefined") return;
+  if (token) window.sessionStorage.setItem(REFRESH_STORAGE_KEY, token);
+  else window.sessionStorage.removeItem(REFRESH_STORAGE_KEY);
+}
+
+async function supabaseAuth(path: string, body: Record<string, unknown>): Promise<any> {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("Supabase Auth is not configured in this deployment.");
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.msg || payload.message || payload.error_description || payload.error || "Authentication failed.");
+  return payload;
+}
+
+export async function signUpWithSupabase(input: { email: string; password: string; full_name: string; organisation_name: string }) {
+  return supabaseAuth("signup", { email: input.email, password: input.password, data: { full_name: input.full_name, organisation_name: input.organisation_name } });
+}
+
+export async function signInWithSupabase(email: string, password: string) {
+  return supabaseAuth("token?grant_type=password", { email, password });
+}
+
+export async function provisionSupabaseSession(accessToken: string): Promise<AuthSession> {
+  const response = await fetch(`${API_BASE}/v1/auth/provision`, { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error?.message || `Account setup failed (${response.status}).`);
+  return payload as AuthSession;
+}
+
+async function refreshSupabaseAccessToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const refreshToken = window.sessionStorage.getItem(REFRESH_STORAGE_KEY);
+  if (!refreshToken || !SUPABASE_URL || !SUPABASE_KEY) return null;
+  try {
+    const payload = await supabaseAuth("token?grant_type=refresh_token", { refresh_token: refreshToken });
+    setStoredToken(payload.access_token);
+    setStoredRefreshToken(payload.refresh_token);
+    return payload.access_token as string;
+  } catch { setStoredToken(null); return null; }
 }
 
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -100,7 +149,7 @@ export const api = {
   login: (body: { email: string; password: string; turnstile_token?: string }) =>
     apiFetch<AuthSession>("/v1/auth/login", { method: "POST", body: JSON.stringify(body) }),
 
-  logout: () => apiFetch<void>("/v1/auth/logout", { method: "POST" }),
+  logout: async () => {\n    const token = getStoredToken();\n    if (token && SUPABASE_URL && SUPABASE_KEY) { try { await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method: "POST", headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` } }); } catch {} }\n    setStoredToken(null);\n  },
 
   me: () => apiFetch<MeResponse>("/v1/auth/me"),
 
