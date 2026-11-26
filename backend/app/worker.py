@@ -93,23 +93,13 @@ class Default(WorkerEntrypoint):
         return response
 
     async def queue(self, batch: Any) -> None:
-        # Log setup failures separately: these happen before any invoice can be
-        # marked as processing and otherwise look like a mysteriously stuck job.
+        """Process each message independently and persist failures on its invoice."""
         print("[invoice-queue] batch received")
-        try:
-            settings = load_worker_env(self.env)
-            db = D1Database(self.env.DB)
-            storage = SupabaseObjectStorage(
-                settings.supabase_url,
-                settings.supabase_secret_key,
-                settings.supabase_bucket,
-            )
-            provider = create_extraction_provider(settings)
-        except Exception as exc:
-            print(f"[invoice-queue] worker setup failed: {type(exc).__name__}: {exc}")
-            raise
 
         for message in batch.messages:
+            invoice_id = ""
+            organisation_id = ""
+            db = None
             try:
                 body = _normalise_queue_body(message.body)
                 if not isinstance(body, dict):
@@ -129,7 +119,30 @@ class Default(WorkerEntrypoint):
                     message.ack()
                     continue
 
-                print(f"[invoice-queue] processing invoice {invoice_id}")
+                # Create the database adapter first and mark the job before loading
+                # optional services. Previously, setup exceptions happened before
+                # the invoice row was touched, leaving the UI stuck at "queued".
+                db = D1Database(self.env.DB)
+                started_at = utc_now_iso()
+                await db.execute(
+                    """
+                    UPDATE invoices
+                    SET status = 'processing', processing_started_at = ?,
+                        extraction_error = NULL, updated_at = ?
+                    WHERE id = ? AND organisation_id = ? AND deleted_at IS NULL
+                    """,
+                    (started_at, started_at, invoice_id, organisation_id),
+                )
+
+                print(f"[invoice-queue] setting up extraction for invoice {invoice_id}")
+                settings = load_worker_env(self.env)
+                storage = SupabaseObjectStorage(
+                    settings.supabase_url,
+                    settings.supabase_secret_key,
+                    settings.supabase_bucket,
+                )
+                provider = create_extraction_provider(settings)
+
                 await process_invoice_job(
                     db,
                     storage,
@@ -140,8 +153,30 @@ class Default(WorkerEntrypoint):
                 )
                 message.ack()
                 print(f"[invoice-queue] completed invoice job {invoice_id}")
+
             except Exception as exc:
-                print(f"[invoice-queue] invoice job failed: {type(exc).__name__}: {exc}")
-                # Do not acknowledge a job that failed before process_invoice_job
-                # could persist a terminal status. Let Cloudflare retry it.
+                error = f"Queue consumer error: {type(exc).__name__}: {exc}"[:1000]
+                print(f"[invoice-queue] invoice job failed: {error}")
+                if db is not None and invoice_id and organisation_id:
+                    try:
+                        completed_at = utc_now_iso()
+                        await db.execute(
+                            """
+                            UPDATE invoices
+                            SET status = 'failed', extraction_error = ?,
+                                processing_completed_at = ?, updated_at = ?
+                            WHERE id = ? AND organisation_id = ?
+                              AND status IN ('queued', 'processing')
+                            """,
+                            (error, completed_at, completed_at, invoice_id, organisation_id),
+                        )
+                        # The failure is now visible on the invoice; don't send
+                        # the same permanently failing setup job through the DLQ.
+                        message.ack()
+                        continue
+                    except Exception as persist_exc:
+                        print(
+                            "[invoice-queue] could not persist failure for "
+                            f"{invoice_id}: {type(persist_exc).__name__}: {persist_exc}"
+                        )
                 message.retry()
