@@ -42,8 +42,9 @@ MAX_UPLOAD_BYTES = "15728640"
 ALLOWED_ORIGINS = "https://invoiceline-web-prod.sakshyamniraula2.workers.dev"
 RATE_LIMIT_PER_MINUTE = "120"
 PUBLIC_BASE_URL = "https://invoiceline-api-prod.sakshyamniraula2.workers.dev"
-SUPABASE_URL = "https://jqggrvirneqygwzbrebl.supabase.co"
+SUPABASE_URL = "https://fqbsiybsuvfzwoxtjxsu.supabase.co"
 SUPABASE_BUCKET = "invoiceline-documents"
+SUPABASE_PUBLISHABLE_KEY = "sb_publishable_cP8bm0jWniB1sCSwwMfiSA_TI3rL4GG"
 
 [[env.production.d1_databases]]
 binding = "DB"
