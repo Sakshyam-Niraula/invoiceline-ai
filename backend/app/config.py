@@ -25,6 +25,7 @@ class Settings:
     session_ttl_hours: int
     signed_url_ttl_seconds: int
     supabase_url: str
+    supabase_publishable_key: str
     supabase_secret_key: str
     supabase_bucket: str
 
@@ -61,6 +62,7 @@ class Settings:
             session_ttl_hours=int(raw.get("SESSION_TTL_HOURS", 24 * 7)),
             signed_url_ttl_seconds=int(raw.get("SIGNED_URL_TTL_SECONDS", 300)),
             supabase_url=str(raw.get("SUPABASE_URL", "")).rstrip("/"),
+            supabase_publishable_key=str(raw.get("SUPABASE_PUBLISHABLE_KEY", "")).strip(),
             supabase_secret_key=str(raw.get("SUPABASE_SECRET_KEY", "")).strip(),
             supabase_bucket=str(raw.get("SUPABASE_BUCKET", "invoiceline-documents")).strip(),
         )
@@ -84,6 +86,7 @@ def load_worker_env(worker_env: Any) -> Settings:
         "SESSION_TTL_HOURS",
         "SIGNED_URL_TTL_SECONDS",
         "SUPABASE_URL",
+        "SUPABASE_PUBLISHABLE_KEY",
         "SUPABASE_SECRET_KEY",
         "SUPABASE_BUCKET",
     ):
