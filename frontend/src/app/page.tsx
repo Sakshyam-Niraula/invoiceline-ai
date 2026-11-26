@@ -15,22 +15,6 @@ function Pill({ value }: { value: string }) {
   const color = ["approved", "passed"].includes(value) ? "bg-emerald-50 text-emerald-700" : ["failed", "rejected"].includes(value) ? "bg-rose-50 text-rose-700" : ["needs_review", "warning", "requires_review"].includes(value) ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600";
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${color}`}>{pretty(value)}</span>;
 }
-function TurnstileChallenge({ onToken }: { onToken: (token: string) => void }) {
-  const host = useRef<HTMLDivElement>(null);
-  const callback = useRef(onToken);
-  callback.current = onToken;
-  useEffect(() => {
-    if (!TURNSTILE_SITE_KEY || !host.current) return;
-    const script = document.createElement("script");
-    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-    script.async = true; script.defer = true;
-    let widget: string | undefined;
-    script.onload = () => { if (host.current && window.turnstile) widget = window.turnstile.render(host.current, { sitekey: TURNSTILE_SITE_KEY, callback: token => callback.current(token), "expired-callback": () => callback.current("") }); };
-    document.head.appendChild(script);
-    return () => { if (widget && window.turnstile) window.turnstile.remove(widget); script.remove(); };
-  }, []);
-  return TURNSTILE_SITE_KEY ? <div className="mt-5"><div ref={host}/></div> : null;
-}
 function Login({ done }: { done: (s: AuthSession) => void }) {
   const [register, setRegister] = useState(false), [email, setEmail] = useState(""), [password, setPassword] = useState(""), [name, setName] = useState(""), [org, setOrg] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   async function submit(e: React.FormEvent) { e.preventDefault(); setBusy(true); setError(""); setNotice(""); try { const auth = register ? await signUpWithSupabase({ email, password, full_name: name, organisation_name: org }) : await signInWithSupabase(email, password); if (!auth.access_token) { setNotice("Account created. Check your email to confirm your address, then return here to sign in."); return; } setStoredToken(auth.access_token); setStoredRefreshToken(auth.refresh_token || null); const session = await provisionSupabaseSession(auth.access_token); done(session); } catch (x) { setStoredToken(null); setError(x instanceof Error ? x.message : "Could not sign in."); } finally { setBusy(false); } }
