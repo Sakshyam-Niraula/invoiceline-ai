@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from workers import Response, WorkerEntrypoint, asgi
@@ -20,6 +21,32 @@ def _build_worker_app(env: Any):
     queue = WorkerQueueProducer(env.INVOICE_QUEUE)
     provider = create_extraction_provider(settings)
     return create_app(settings, db=db, storage=storage, queue=queue, extraction_provider=provider)
+
+
+def _normalise_queue_body(body: Any) -> Any:
+    """Convert Cloudflare/Pyodide queue payloads into native Python values."""
+    to_py = getattr(body, "to_py", None)
+    if callable(to_py):
+        body = to_py()
+
+    if isinstance(body, str):
+        try:
+            body = json.loads(body)
+        except json.JSONDecodeError:
+            return body
+
+    if isinstance(body, dict):
+        return body
+
+    # Be tolerant of JS objects exposed through the Python FFI.
+    items = getattr(body, "items", None)
+    if callable(items):
+        try:
+            return dict(items())
+        except Exception:
+            pass
+
+    return body
 
 
 class Default(WorkerEntrypoint):
@@ -55,9 +82,6 @@ class Default(WorkerEntrypoint):
         # Add CORS headers at the Worker boundary to cover success and error
         # responses alike, including responses returned by the ASGI adapter.
         if allowed:
-            # The ASGI adapter already returned a valid Worker Response.
-            # Mutate its headers in place instead of reconstructing it: this
-            # preserves the original status, cookies, and streaming body.
             response.headers.set("Access-Control-Allow-Origin", origin)
             response.headers.set("Access-Control-Allow-Credentials", "true")
             response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
@@ -69,23 +93,55 @@ class Default(WorkerEntrypoint):
         return response
 
     async def queue(self, batch: Any) -> None:
-        settings = load_worker_env(self.env)
-        db = D1Database(self.env.DB)
-        storage = SupabaseObjectStorage(settings.supabase_url, settings.supabase_secret_key, settings.supabase_bucket)
-        provider = create_extraction_provider(settings)
+        # Log setup failures separately: these happen before any invoice can be
+        # marked as processing and otherwise look like a mysteriously stuck job.
+        print("[invoice-queue] batch received")
+        try:
+            settings = load_worker_env(self.env)
+            db = D1Database(self.env.DB)
+            storage = SupabaseObjectStorage(
+                settings.supabase_url,
+                settings.supabase_secret_key,
+                settings.supabase_bucket,
+            )
+            provider = create_extraction_provider(settings)
+        except Exception as exc:
+            print(f"[invoice-queue] worker setup failed: {type(exc).__name__}: {exc}")
+            raise
 
         for message in batch.messages:
-            body = message.body
-            to_py = getattr(body, "to_py", None)
-            if callable(to_py):
-                body = to_py()
-            if isinstance(body, dict) and body.get("type") == "extract_invoice":
+            try:
+                body = _normalise_queue_body(message.body)
+                if not isinstance(body, dict):
+                    print(f"[invoice-queue] unsupported message body type: {type(body).__name__}")
+                    message.ack()
+                    continue
+
+                if body.get("type") != "extract_invoice":
+                    print(f"[invoice-queue] ignored unknown message type: {body.get('type')!r}")
+                    message.ack()
+                    continue
+
+                invoice_id = str(body.get("invoice_id") or "").strip()
+                organisation_id = str(body.get("organisation_id") or "").strip()
+                if not invoice_id or not organisation_id:
+                    print("[invoice-queue] invalid extraction message: missing invoice_id or organisation_id")
+                    message.ack()
+                    continue
+
+                print(f"[invoice-queue] processing invoice {invoice_id}")
                 await process_invoice_job(
                     db,
                     storage,
                     settings,
                     provider,
-                    invoice_id=str(body["invoice_id"]),
-                    organisation_id=str(body["organisation_id"]),
+                    invoice_id=invoice_id,
+                    organisation_id=organisation_id,
                 )
-            message.ack()
+                message.ack()
+                print(f"[invoice-queue] completed invoice job {invoice_id}")
+            except Exception as exc:
+                print(f"[invoice-queue] invoice job failed: {type(exc).__name__}: {exc}")
+                # Do not acknowledge a job that failed before process_invoice_job
+                # could persist a terminal status. Let Cloudflare retry it.
+                message.retry()
