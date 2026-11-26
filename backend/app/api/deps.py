@@ -10,6 +10,7 @@ from app.config import Settings
 from app.core.crypto import hash_token, utc_now_iso
 from app.core.errors import ForbiddenError, UnauthorizedError
 from app.core.rate_limit import enforce_rate_limit
+from app.core.supabase_auth import verify_supabase_access_token
 from app.db.base import Database
 from app.schemas.auth import RoleType
 from app.services.auth_service import ROLE_PERMISSIONS
@@ -113,10 +114,31 @@ async def get_auth_context(
         """,
         (token_hash,),
     )
-    if row is None or row["revoked_at"] is not None:
-        raise UnauthorizedError("Invalid or revoked session", code="invalid_session")
-    if str(row["expires_at"]) < utc_now_iso():
-        raise UnauthorizedError("Session has expired", code="expired_session")
+    if row is None:
+        # Supabase Auth sessions are verified by Supabase itself, then mapped
+        # to the existing D1 user and membership records.
+        identity = await verify_supabase_access_token(raw_token, settings)
+        local_user = await db.fetchone(
+            "SELECT id FROM users WHERE email = ?",
+            (str(identity["email"]).strip().lower(),),
+        )
+        if local_user is None:
+            raise UnauthorizedError("Account provisioning is incomplete", code="account_not_provisioned")
+        row = await db.fetchone(
+            """SELECT m.role, m.user_id, m.organisation_id
+               FROM memberships m WHERE m.user_id = ?
+               ORDER BY m.created_at ASC LIMIT 1""",
+            (local_user["id"],),
+        )
+        if row is None:
+            raise UnauthorizedError("Account has no workspace membership", code="account_not_provisioned")
+        session_id = None
+    else:
+        if row["revoked_at"] is not None:
+            raise UnauthorizedError("Invalid or revoked session", code="invalid_session")
+        if str(row["expires_at"]) < utc_now_iso():
+            raise UnauthorizedError("Session has expired", code="expired_session")
+        session_id = str(row["session_id"])
 
     org_id = str(row["organisation_id"])
     user_id = str(row["user_id"])
@@ -127,7 +149,7 @@ async def get_auth_context(
         actor_type="user",
         user_id=user_id,
         api_key_id=None,
-        session_id=str(row["session_id"]),
+        session_id=session_id,
         role=role,
         scopes=frozenset(ROLE_PERMISSIONS[role]),
         request_id=req_id,
