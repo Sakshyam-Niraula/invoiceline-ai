@@ -71,7 +71,9 @@ async function supabaseAuth(path: string, body: Record<string, unknown>): Promis
 }
 
 export async function signUpWithSupabase(input: { email: string; password: string; full_name: string; organisation_name: string }) {
-  return supabaseAuth("signup", { email: input.email, password: input.password, data: { full_name: input.full_name, organisation_name: input.organisation_name } });
+  const redirectTo = typeof window !== "undefined" ? window.location.origin : "";
+  const redirectQuery = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : "";
+  return supabaseAuth(`signup${redirectQuery}`, { email: input.email, password: input.password, data: { full_name: input.full_name, organisation_name: input.organisation_name } });
 }
 
 export async function signInWithSupabase(email: string, password: string) {
