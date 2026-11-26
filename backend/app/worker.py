@@ -93,8 +93,8 @@ class Default(WorkerEntrypoint):
             response.headers.append("Vary", "Origin")
         return response
 
-    async def queue(self, batch: Any) -> None:
-        """Process each message independently and persist failures on its invoice."""
+    async def queue(self, batch: Any, *_runtime_args: Any) -> None:
+        """Process each message independently and tolerate runtime-supplied handler context."""
         print("[invoice-queue] batch received")
 
         for message in batch.messages:
